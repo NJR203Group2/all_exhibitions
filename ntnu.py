@@ -102,7 +102,7 @@ def fetch_ntnu_exhibitions():
             time_text, place_text = get_time_and_place(ex["url"])
 
         results.append({
-            "museum": museum_name,
+            "museum": '國立臺灣師範大學-師大美術館',
             "title": ex.get("title", ""),
             "date": time_text or "",
             "topic": "",

@@ -38,7 +38,7 @@ def get_driver(headless=True):
 def fetch_huashan_exhibitions():
     base_url = "https://www.huashan1914.com"
     exh = "https://www.huashan1914.com/w/huashan1914"
-    museum_name = "華山1914文創園區"
+    museum_name = "華山1914文化創意產業園區"
 
     driver = get_driver(headless=True)
     if driver is None:

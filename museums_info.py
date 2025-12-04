@@ -12,7 +12,7 @@ FIELD_MASK = ",".join([
     "places.displayName",
     "places.formattedAddress",
     "places.location",
-    "places.types",                             # ⭐ 加回來，但不輸出到 CSV
+    "places.types",                           
     "places.websiteUri",
     "places.internationalPhoneNumber",
     "places.rating",

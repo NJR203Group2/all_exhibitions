@@ -1,4 +1,3 @@
-# npm_museum.py
 import requests as req
 from bs4 import BeautifulSoup as bs
 from urllib.parse import urljoin
@@ -7,6 +6,58 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 session = req.Session()
 session.verify = False
+
+
+def parse_npm_date(raw: str):
+    """
+    專門處理故宮展覽日期格式。
+
+    目前看到的樣子：
+    2025-10-10~2026-01-07
+    2024-05-17~2026-05-17
+    2023-12-01~
+    2020-05-01~
+    常設展
+
+    規則：
+    - '常設展'：
+        start_date = None, end_date = None, is_permanent = 1
+    - 'YYYY-MM-DD~YYYY-MM-DD'：
+        start_date, end_date 皆有值, is_permanent = 0
+    - 'YYYY-MM-DD~'（只有開頭）：
+        start_date 有值, end_date = None, is_permanent = 1
+    """
+    if not raw:
+        return None, None, 0
+
+    s = raw.strip()
+    if not s:
+        return None, None, 0
+
+    # 1) 明寫常設展
+    if "常設展" in s:
+        return None, None, 1
+
+    # 2) 含有 "~" 的格式
+    if "~" in s:
+        left, right = s.split("~", 1)
+        start = left.strip() or None
+        end = right.strip() or None
+
+        # 有開始、沒有結束 -> 視為常設/長期展
+        if start and not end:
+            return start, None, 1
+        # 有開始、有結束 -> 一般期間展
+        if start and end:
+            return start, end, 0
+
+        # 其它怪情況
+        if start:
+            return start, None, 0
+        return None, None, 0
+
+    # 3) 其它形式（基本上故宮不太會用，但保險留一下）
+    return None, None, 0
 
 
 def fetch_npm_exhibitions():
@@ -28,7 +79,7 @@ def fetch_npm_exhibitions():
         if h3:
             title = h3.get_text(strip=True)
 
-        # 展覽日期
+        # 展覽日期（原始字串）
         ex_date = ""
         d1 = exh.find("div", class_="exhibition-list-date")
         if d1:
@@ -39,6 +90,9 @@ def fetch_npm_exhibitions():
                 date_div = content_top.find("div", class_=False, recursive=False)
                 if date_div:
                     ex_date = date_div.get_text(strip=True)
+
+        # 解析日期 -> start_date, end_date, is_permanent
+        start_date, end_date, is_permanent = parse_npm_date(ex_date)
 
         # 展覽標籤/類別
         ex_tag = ""
@@ -69,7 +123,10 @@ def fetch_npm_exhibitions():
         results.append({
             "museum": museum_name,
             "title": title,
-            "date": ex_date,
+            "date": ex_date,            # 原始日期字串
+            "start_date": start_date,   # 解析後開始日期
+            "end_date": end_date,       # 解析後結束日期
+            "is_permanent": is_permanent,  # 1=常設/長期展, 0=一般展期
             "topic": ex_tag,
             "url": ex_link,
             "image_url": ex_img,

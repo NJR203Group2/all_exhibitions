@@ -1,4 +1,3 @@
-# ntnu.py
 import re
 import requests as req
 from bs4 import BeautifulSoup as bs
@@ -10,6 +9,69 @@ session.verify = False
 
 
 BASE_URL = "https://www.artmuse.ntnu.edu.tw/index.php/current_exhibit/"
+
+
+def parse_ntnu_date(raw: str):
+    """
+    處理師大美術館展覽日期格式，例如：
+    2025/09/23 Tue.－
+    2024/7/1（二）起
+    （預留）2025/09/23 - 2025/12/31
+
+    規則：
+    - 抓字串中的所有 'YYYY/M/D' 或 'YYYY/MM/DD'
+    - 若有兩個日期：視為起訖區間 -> is_permanent = 0
+    - 若只有一個日期：視為長期/常設展 -> is_permanent = 1
+    """
+
+    if not raw:
+        return None, None, 0
+
+    s = raw.strip()
+    if not s:
+        return None, None, 0
+
+    # 預防將來出現「常設展」文字
+    if "常設展" in s:
+        return None, None, 1
+
+    def norm_date(d: str):
+        # 'YYYY/M/D' -> 'YYYY-MM-DD'
+        d = d.strip()
+        parts = d.split("/")
+        if len(parts) != 3:
+            return None
+        y, mm, dd = parts
+        try:
+            y = int(y)
+            mm = int(mm)
+            dd = int(dd)
+        except ValueError:
+            return None
+        return f"{y:04d}-{mm:02d}-{dd:02d}"
+
+    # 擷取所有 yyyy/m/d 或 yyyy/mm/dd
+    dates = re.findall(r"\d{4}/\d{1,2}/\d{1,2}", s)
+
+    if len(dates) >= 2:
+        start = norm_date(dates[0])
+        end = norm_date(dates[1])
+        if start and end:
+            return start, end, 0
+        if start and not end:
+            return start, None, 1
+        if start:
+            return start, None, 0
+        return None, None, 0
+
+    if len(dates) == 1:
+        start = norm_date(dates[0])
+        if start:
+            # 只有開始日期 -> 長期/常設
+            return start, None, 1
+
+    # 抓不到就當解析失敗
+    return None, None, 0
 
 
 def museum_info(base_url: str):
@@ -101,10 +163,16 @@ def fetch_ntnu_exhibitions():
         if ex.get("url"):
             time_text, place_text = get_time_and_place(ex["url"])
 
+        # ⭐ 解析日期為 start_date / end_date / is_permanent
+        start_date, end_date, is_permanent = parse_ntnu_date(time_text or "")
+
         results.append({
-            "museum": '國立臺灣師範大學-師大美術館',
+            "museum": "國立臺灣師範大學-師大美術館",
             "title": ex.get("title", ""),
-            "date": time_text or "",
+            "date": time_text or "",          # 原始日期字串（例如 2025/09/23 Tue.－）
+            "start_date": start_date,         # YYYY-MM-DD 或 None
+            "end_date": end_date,             # YYYY-MM-DD 或 None
+            "is_permanent": is_permanent,     # 1 = 長期/常設, 0 = 一般展期
             "topic": "",
             "url": ex.get("url", ""),
             "image_url": ex.get("image_url", ""),
@@ -115,3 +183,4 @@ def fetch_ntnu_exhibitions():
         })
 
     return results
+print(fetch_ntnu_exhibitions())

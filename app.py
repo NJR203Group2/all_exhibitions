@@ -1,10 +1,10 @@
 import csv
 import traceback
+import os
 
 print("app.py 開始執行")
 
 # 先確認目前工作目錄（看是不是在 exhibitions 資料夾）
-import os
 print("當前工作目錄:", os.getcwd())
 
 # 嘗試匯入七個模組
@@ -25,35 +25,46 @@ except Exception as e:
     raise
 
 
+# --------------------
+# CSV 欄位（已移除 展覽類別、備註）
+# --------------------
 FIELDNAMES = [
     "館別",
     "展覽名稱",
     "展覽日期",
+    "start_date",
+    "end_date",
+    "is_permanent",
     "展覽主題",
     "展覽連結",
     "展覽圖片",
     "展覽地點",
     "展覽時間",
-    "展覽類別",
-    "備註",
 ]
 
 
+# --------------------
+# 統一欄位格式
+# --------------------
 def normalize(ex):
     return {
         "館別": ex.get("museum", ""),
         "展覽名稱": ex.get("title", ""),
         "展覽日期": ex.get("date", ""),
+        "start_date": ex.get("start_date", ""),
+        "end_date": ex.get("end_date", ""),
+        "is_permanent": ex.get("is_permanent", ""),
         "展覽主題": ex.get("topic", ""),
         "展覽連結": ex.get("url", ""),
         "展覽圖片": ex.get("image_url", ""),
         "展覽地點": ex.get("location", ""),
         "展覽時間": ex.get("time", ""),
-        "展覽類別": ex.get("category", ""),
-        "備註": ex.get("extra", ""),
     }
 
 
+# --------------------
+# 抓全部爬蟲結果
+# --------------------
 def collect_all_exhibitions():
     all_exhibitions = []
 
@@ -88,6 +99,9 @@ def collect_all_exhibitions():
     return all_exhibitions
 
 
+# --------------------
+# 寫入 CSV
+# --------------------
 def save_to_csv(filename, exhibitions):
     print(f"準備寫入 CSV：{filename}（共 {len(exhibitions)} 筆）")
     with open(filename, "w", newline="", encoding="utf-8-sig") as f:
@@ -98,6 +112,9 @@ def save_to_csv(filename, exhibitions):
     print("CSV 寫入完成")
 
 
+# --------------------
+# Main
+# --------------------
 def main():
     print("進入 main()")
     try:

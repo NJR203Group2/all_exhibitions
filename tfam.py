@@ -1,4 +1,3 @@
-# tfam.py
 import re
 from urllib.parse import urljoin
 
@@ -33,13 +32,76 @@ def get_driver(headless=True):
         return None
 
 
+def parse_tfam_date(raw: str):
+    """
+    處理臺北市立美術館的展覽日期格式，例如：
+    2025/11/01 - 2026/03/29
+    2025/09/19 - 2026/08/31
+    2025/01/18 - 2025/12/21
+    2025/09/27 - 2026/02/22
+
+    通常會混在 ex_time 字串裡（日期 + 時段），所以這裡用 regex 抓出日期部分。
+
+    規則：
+    - 有 'YYYY/MM/DD - YYYY/MM/DD'：
+        -> start_date、end_date 皆有，is_permanent = 0
+    - 只有一個 'YYYY/MM/DD'：
+        -> start_date 有值、end_date = None、is_permanent = 1
+    """
+    if not raw:
+        return None, None, 0
+
+    s = raw.strip()
+    if not s:
+        return None, None, 0
+
+    def norm_date(d: str):
+        # 'YYYY/MM/DD' -> 'YYYY-MM-DD'
+        d = d.strip()
+        parts = d.split("/")
+        if len(parts) != 3:
+            return None
+        y, mm, dd = parts
+        try:
+            y = int(y)
+            mm = int(mm)
+            dd = int(dd)
+        except ValueError:
+            return None
+        return f"{y:04d}-{mm:02d}-{dd:02d}"
+
+    # 1) 嘗試抓「起訖日期區間」
+    m = re.search(r"(\d{4}/\d{1,2}/\d{1,2})\s*-\s*(\d{4}/\d{1,2}/\d{1,2})", s)
+    if m:
+        start_raw, end_raw = m.groups()
+        start = norm_date(start_raw)
+        end = norm_date(end_raw)
+        if start and end:
+            return start, end, 0
+        if start and not end:
+            return start, None, 1
+        if start:
+            return start, None, 0
+        return None, None, 0
+
+    # 2) 沒有範圍，就抓單一日期
+    m2 = re.search(r"(\d{4}/\d{1,2}/\d{1,2})", s)
+    if m2:
+        start = norm_date(m2.group(1))
+        if start:
+            return start, None, 1
+
+    # 3) 完全抓不到
+    return None, None, 0
+
+
 def fetch_tfam_exhibitions():
     BASE = "https://www.tfam.museum/"
     HOME = "https://www.tfam.museum/index.aspx?ddlLang=zh-tw"
     EXH = "https://www.tfam.museum/Exhibition/Exhibition.aspx?ddlLang=zh-tw"
     CONTAINER_XPATH = '/html/body/form/div[3]/div[3]/div/div[2]'
 
-    # 抓館名
+    # 抓館名（保留你原本的寫法）
     museum_name = "臺北市立美術館"
     r = session.get(HOME, timeout=20)
     r.raise_for_status()
@@ -87,6 +149,9 @@ def fetch_tfam_exhibitions():
             except Exception:
                 pass
 
+            # 解析日期區間
+            start_date, end_date, is_permanent = parse_tfam_date(ex_time)
+
             # 展覽地點
             ex_place = ""
             try:
@@ -107,12 +172,15 @@ def fetch_tfam_exhibitions():
                 results.append({
                     "museum": museum_name,
                     "title": title,
-                    "date": ex_time,      # 這裡日期+時間混在一起，暫時放 date
+                    "date": ex_time,          # 原始：日期 + 時間
+                    "start_date": start_date, # 解析後開始日期
+                    "end_date": end_date,     # 解析後結束日期
+                    "is_permanent": is_permanent,  # 北美館幾乎都是 0
                     "topic": "",
                     "url": ex_link,
                     "image_url": img_src,
                     "location": ex_place,
-                    "time": ex_time,
+                    "time": ex_time,          # 你要的話之後可以只留下時段
                     "category": "",
                     "extra": "",
                 })
@@ -120,3 +188,4 @@ def fetch_tfam_exhibitions():
         driver.quit()
 
     return results
+print(fetch_tfam_exhibitions())

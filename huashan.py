@@ -1,4 +1,3 @@
-# huashan.py
 import re
 from urllib.parse import urljoin
 
@@ -33,6 +32,66 @@ def get_driver(headless=True):
     except Exception as e:
         print("⚠️ 無法啟動 Selenium driver，略過華山：", repr(e))
         return None
+
+
+def parse_huashan_date(raw: str):
+    """
+    處理華山展覽日期格式，例如：
+    202510.03(五) - 202511.30(日)
+    202511.07(五) - 202511.09(日)
+    202510.01(三) - 202601.05(一)
+    202505.08(四) - 202512.31(三)
+    202511.21(五) - 202511.23(日)
+
+    型態為：YYYYMM.DD(週) - YYYYMM.DD(週)
+
+    規則：
+    - 有開始、有結束：一般展期 → is_permanent = 0
+    - 若未來只出現單一日期：視為長期/常設 → end_date=None, is_permanent=1
+
+    回傳：start_date, end_date, is_permanent
+    日期格式為 'YYYY-MM-DD' 或 None
+    """
+    if not raw:
+        return None, None, 0
+
+    s = raw.strip()
+    if not s:
+        return None, None, 0
+
+    def parse_token(token: str):
+        # 只保留數字和小數點
+        cleaned = re.sub(r"[^0-9\.]", "", token)
+        # 例如 202510.03 -> YYYY=2025, MM=10, DD=03
+        m = re.match(r"^(\d{4})(\d{2})\.(\d{1,2})$", cleaned)
+        if not m:
+            return None
+        y, mm, dd = m.groups()
+        return f"{y}-{int(mm):02d}-{int(dd):02d}"
+
+    # 標準情況：有 "-"，兩邊各一個日期
+    norm = s.replace("－", "-")  # 有時候會用全形 dash
+    parts = re.split(r"\s*-\s*", norm, maxsplit=1)
+
+    if len(parts) == 2:
+        left, right = parts
+        start = parse_token(left)
+        end = parse_token(right)
+
+        if start and end:
+            return start, end, 0   # 一般展期
+        if start and not end:
+            return start, None, 1  # 長期展
+        if start:
+            return start, None, 0
+        return None, None, 0
+
+    # 若只出現一段（預防）
+    start = parse_token(norm)
+    if start:
+        return start, None, 1
+
+    return None, None, 0
 
 
 def fetch_huashan_exhibitions():
@@ -81,11 +140,14 @@ def fetch_huashan_exhibitions():
             if ex_title:
                 title = ex_title.get_text(strip=True)
 
-            # 展覽日期
+            # 展覽日期（原始字串）
             ex_date = ""
             dates = [d.get_text(strip=True) for d in html.find_all("div", class_="card-date")]
             if dates:
                 ex_date = " - ".join(dates[:2])
+
+            # 解析日期
+            start_date, end_date, is_permanent = parse_huashan_date(ex_date)
 
             # 展覽時間
             ex_time = ""
@@ -110,7 +172,10 @@ def fetch_huashan_exhibitions():
             results.append({
                 "museum": museum_name,
                 "title": title,
-                "date": ex_date,
+                "date": ex_date,           # 原始日期字串
+                "start_date": start_date,  # 解析後開始日期
+                "end_date": end_date,      # 解析後結束日期
+                "is_permanent": is_permanent,  # 0: 一般展期, 1: 長期/常設
                 "topic": "",
                 "url": ex_link,
                 "image_url": ex_img,
@@ -123,3 +188,6 @@ def fetch_huashan_exhibitions():
         driver.quit()
 
     return results
+
+
+print(fetch_huashan_exhibitions())
